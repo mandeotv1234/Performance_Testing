@@ -98,17 +98,25 @@ class OrangeHRMUser(HttpUser):
         # If the token from login is needed for API calls (often distinct from form _token),
         # but usually session cookie handles auth. Let's see. 
         
-        resp_create = self.client.post(
+        with self.client.post(
             "/web/index.php/api/v2/pim/employees",
             json=payload,
             headers=headers,
-            name="API: Create Employee"
-        )
-        
-        if resp_create.status_code in [200, 201]:
-             logger.info(f"Created Employee: {emp_data['firstName']} {emp_data['lastName']} - Status: {resp_create.status_code}")
-        else:
-             logger.error(f"Failed to Create Employee: {resp_create.status_code} - Body: {resp_create.text[:100]}")
+            name="API: Create Employee",
+            catch_response=True
+        ) as resp_create:
+            if resp_create.status_code in [200, 201]:
+                # Deep validation of body
+                body_lower = resp_create.text.lower()
+                if "error" in body_lower or "\"success\":false" in body_lower:
+                     resp_create.failure(f"Logical Error in 200 OK: {resp_create.text}")
+                     logger.error(f"Failed to Create Employee (Logical): {resp_create.text}")
+                else:
+                     resp_create.success()
+                     logger.info(f"Created Employee: {emp_data['firstName']} {emp_data['lastName']} - Status: {resp_create.status_code} - Body: {resp_create.text[:100]}...")
+            else:
+                 resp_create.failure(f"HTTP Error: {resp_create.status_code}")
+                 logger.error(f"Failed to Create Employee: {resp_create.status_code} - Body: {resp_create.text[:100]}")
 
 
         # 3. Navigate to Employee List
